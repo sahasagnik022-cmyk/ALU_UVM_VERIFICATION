@@ -12,7 +12,7 @@ package alu_pkg;
   `include "alu_out_monitor.sv"
   `include "alu_inp_agent.sv"
   `include "alu_out_agent.sv"
-  `include "alu_scoreboard1.sv"
+  `include "alu_scoreboard.sv"
   `include "alu_subscriber.sv"
   `include "alu_env.sv"
   `include "alu_test.sv"
