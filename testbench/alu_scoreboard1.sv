@@ -1,5 +1,5 @@
-class alu_scoreboard1 extends uvm_scoreboard;
-    `uvm_component_utils(alu_scoreboard1)
+class alu_scoreboard extends uvm_scoreboard;
+    `uvm_component_utils(alu_scoreboard)
     uvm_tlm_analysis_fifo #(alu_seq_item)in_fifo;
     uvm_tlm_analysis_fifo #(alu_seq_item)out_fifo;
 
@@ -10,11 +10,11 @@ class alu_scoreboard1 extends uvm_scoreboard;
     int in_count,out_count;
     int match_count=0;
     int mismatch_count=0;
-    bit op1_pending=0;
-    bit op2_pending=0;
-    bit[7:0] latched_oprd1, latched_oprd2;
-    bit[3:0] latched_cmd;
-    bit latched_mode, latched_cin, latched_ce;
+    bit op1_p=0;
+    bit op2_p=0;
+    bit[7:0] l_oprd1, l_oprd2;
+    bit[3:0] l_cmd;
+    bit l_mode, l_cin, l_ce;
     bit sch_en;
     int timeout=0;
     int wait_cycles=0;
@@ -34,11 +34,11 @@ class alu_scoreboard1 extends uvm_scoreboard;
             `uvm_info("REFERENCE MODEL",$sformatf("REFERENCE MODEL \n%s",in_xn.sprint()),UVM_HIGH)
             if (sch_en) begin
               if (is_timeout)
-                exp_item[in_count] = in_xn; // Immediate routing! (Or in_count + 1 depending on clock edge)
+                exp_item[in_count] = in_xn;
               else if (in_xn.MODE == 1'b1 && in_xn.CMD inside {9,10})
-              exp_item[in_count + 3] = in_xn; // 3-cycle multiplication
-            else
-              exp_item[in_count + 2] = in_xn; // 2-cycle basic op
+                exp_item[in_count + 3] = in_xn;
+              else
+                exp_item[in_count + 2] = in_xn;
             end
             out_fifo.get(out_xn);
             out_count++;
@@ -122,97 +122,82 @@ class alu_scoreboard1 extends uvm_scoreboard;
     bit [7:0] oprd1, oprd2;
     bit [3:0] CMD_tmp;
     bit [7:0] AU_out_tmp1, AU_out_tmp2, OPA_1, OPB_1;
-    bit start; // Internal flag to trigger ALU math
+    bit start;
 
-    // Reset default flags for this clock cycle
     sch_en = 1'b0;
     is_timeout = 1'b0;
     start = 1'b0;
-
-    // ------------------------------------------------------------------
-    // PART 1: The 16-Cycle FSM & Operand Matching
-    // ------------------------------------------------------------------
     if (t.RST) begin
-      op1_pending = 1'b0;
-      op2_pending = 1'b0;
+      op1_p = 1'b0;
+      op2_p = 1'b0;
       wait_cycles = 0;
     end
     else if (t.INP_VALID == 2'b11) begin
-      // Both arrived simultaneously: compute immediately
-      op1_pending = 1'b0;
-      op2_pending = 1'b0;
+      op1_p = 1'b0;
+      op2_p = 1'b0;
       wait_cycles = 0;
-      
       oprd1 = t.OPA;
       oprd2 = t.OPB;
       CMD_tmp = t.CMD;
       start = 1'b1;
     end
     else if (t.INP_VALID == 2'b01) begin // Only OPA Valid
-      if (op2_pending) begin
-        // MATCH! OPB arrived earlier. Combine them!
-        op1_pending = 1'b0;
-        op2_pending = 1'b0;
+      if (op2_p) begin
+        op1_p = 1'b0;
+        op2_p = 1'b0;
         wait_cycles = 0;
-        
+
         oprd1   = t.OPA;
-        oprd2   = latched_oprd2;
-        CMD_tmp = latched_cmd;
-        t.MODE  = latched_mode; // Restore latched control signals
-        t.CIN   = latched_cin;
-        t.CE    = latched_ce;
+        oprd2   = l_oprd2;
+        CMD_tmp = l_cmd;
+        t.MODE  = l_mode;
+        t.CIN   = l_cin;
+        t.CE    = l_ce;
         start = 1'b1;
       end else begin
-        // First operand arrived, start waiting
-        latched_oprd1 = t.OPA;
-        latched_cmd   = t.CMD;
-        latched_mode  = t.MODE;
-        latched_cin   = t.CIN;
-        latched_ce    = t.CE;
-        
-        op1_pending = 1'b1;
+        l_oprd1 = t.OPA;
+        l_cmd   = t.CMD;
+        l_mode  = t.MODE;
+        l_cin   = t.CIN;
+        l_ce    = t.CE;
+        op1_p = 1'b1;
         wait_cycles = 0;
       end
     end
     else if (t.INP_VALID == 2'b10) begin // Only OPB Valid
-      if (op1_pending) begin
-        // MATCH! OPA arrived earlier. Combine them!
-        op1_pending = 1'b0;
-        op2_pending = 1'b0;
+      if (op1_p) begin
+        op1_p = 1'b0;
+        op2_p = 1'b0;
         wait_cycles = 0;
-        
-        oprd1   = latched_oprd1;
+
+        oprd1   = l_oprd1;
         oprd2   = t.OPB;
-        CMD_tmp = latched_cmd;
-        t.MODE  = latched_mode;
-        t.CIN   = latched_cin;
-        t.CE    = latched_ce;
+        CMD_tmp = l_cmd;
+        t.MODE  = l_mode;
+        t.CIN   = l_cin;
+        t.CE    = l_ce;
         start = 1'b1;
       end else begin
-        // First operand arrived, start waiting
-        latched_oprd2 = t.OPB;
-        latched_cmd   = t.CMD;
-        latched_mode  = t.MODE;
-        latched_cin   = t.CIN;
-        latched_ce    = t.CE;
-        
-        op2_pending = 1'b1;
+        l_oprd2 = t.OPB;
+        l_cmd   = t.CMD;
+        l_mode  = t.MODE;
+        l_cin   = t.CIN;
+        l_ce    = t.CE;
+
+        op2_p = 1'b1;
         wait_cycles = 0;
       end
     end
     else begin // INP_VALID == 2'b00 (Idle Cycle)
-      if (op1_pending || op2_pending) begin
+      if (op1_p || op2_p) begin
         wait_cycles++;
         if (wait_cycles == 16) begin
-          // TIMEOUT REACHED!
-          op1_pending = 1'b0;
-          op2_pending = 1'b0;
+          op1_p = 1'b0;
+          op2_p = 1'b0;
           wait_cycles = 0;
-          
+
           is_timeout = 1'b1;
           sch_en = 1'b1;     // Schedule the error packet!
-          
-          // Force output to ERR=1
           t.RES   = 16'b0;
           t.COUT  = 1'b0;
           t.OFLOW = 1'b0;
@@ -224,13 +209,8 @@ class alu_scoreboard1 extends uvm_scoreboard;
       end
     end
 
-    // ------------------------------------------------------------------
-    // PART 2: ALU Computation (Only runs if a valid pair is formed!)
-    // ------------------------------------------------------------------
     if (start && t.CE) begin
-      sch_en = 1'b1; 
-
-      // Default values before case statements
+      sch_en = 1'b1;
       t.RES   = 16'b0;
       t.COUT  = 1'b0;
       t.OFLOW = 1'b0;
@@ -240,7 +220,6 @@ class alu_scoreboard1 extends uvm_scoreboard;
       t.ERR   = 1'b0;
 
       if (t.MODE) begin
-        // Mode 1: Arithmetic
         case (CMD_tmp)
           4'b0000: begin
             t.RES  = oprd1 + oprd2;
@@ -294,7 +273,6 @@ class alu_scoreboard1 extends uvm_scoreboard;
         endcase
       end
       else begin
-        // Mode 0: Logic / Shift / Rotate Operations
         case (CMD_tmp)
           4'b0000: t.RES = {1'b0, oprd1 & oprd2};
           4'b0001: t.RES = {1'b0, ~(oprd1 & oprd2)};
